@@ -101,6 +101,18 @@
         "__uuid__": "5d73823d-9684-47c9-acbf-7a05626230fa"
       }
     ],
+    "rowSuperSprite": {
+      "__uuid__": "d70ebc08-95ab-4823-8c9d-58465d0283ab"
+    },
+    "columnSuperSprite": {
+      "__uuid__": "7545c80f-eb48-4a88-aa6f-c9c008ab8a55"
+    },
+    "radiusSuperSprite": {
+      "__uuid__": "824557fa-4d16-4708-b77b-d48796512e5f"
+    },
+    "boardSuperSprite": {
+      "__uuid__": "aafd1983-0739-4310-95fc-cf449e504d39"
+    },
     "_id": ""
   },
   {

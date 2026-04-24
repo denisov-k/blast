@@ -1,5 +1,7 @@
 import { Board } from "../core/Board";
 import {
+  SUPER_TILE_RADIUS,
+  SUPER_TILE_THRESHOLD,
   BOMB_RADIUS,
   INITIAL_BOMB_BOOSTERS,
   INITIAL_MOVES,
@@ -7,8 +9,15 @@ import {
   INITIAL_TELEPORT_BOOSTERS,
   TARGET_SCORE,
 } from "../core/config";
-import { Position, TileMovement, TileSpawn } from "../core/types";
+import {
+  getRandomSuperTileType,
+  Position,
+  TileMovement,
+  TileSpawn,
+  TileUpdate,
+} from "../core/types";
 import { BoardService } from "./BoardService";
+import { findGroup } from "../utils/floodFill";
 
 export enum GameState {
   Playing = "playing",
@@ -29,6 +38,7 @@ export type MoveResult = {
   removed: Position[];
   moved: TileMovement[];
   spawned: TileSpawn[];
+  updated: TileUpdate[];
 };
 
 export type TeleportResult = {
@@ -70,14 +80,63 @@ export class GameService {
     if (this.state !== GameState.Playing) return null;
     if (this.moves <= 0) return null;
 
-    const removed = this.boardService.removeGroup(x, y);
+    const clickedTile = this.board.getTile(x, y);
+    if (!clickedTile) return null;
 
-    if (removed.length === 0) return null;
+    let removed: Position[] = [];
+    let updated: TileUpdate[] = [];
+    let scoreBaseSize = 0;
+
+    if (clickedTile.isSuperTile && clickedTile.superType) {
+      removed = this.boardService.activateSuperTile(
+        x,
+        y,
+        clickedTile.superType,
+        SUPER_TILE_RADIUS
+      );
+
+      if (removed.length === 0) return null;
+
+      scoreBaseSize = removed.length;
+    } else {
+      const group = findGroup(this.board, x, y);
+      if (group.length < 2) return null;
+
+      scoreBaseSize = group.length;
+      const shouldCreateSuperTile = group.length > SUPER_TILE_THRESHOLD;
+
+      if (shouldCreateSuperTile) {
+        const superType = getRandomSuperTileType();
+        const superTile = this.board.createSuperTile(
+          x,
+          y,
+          clickedTile.color,
+          superType
+        );
+
+        for (const tile of group) {
+          if (tile.x === x && tile.y === y) continue;
+
+          this.board.setTile(tile.x, tile.y, null);
+          removed.push({ x: tile.x, y: tile.y });
+        }
+
+        this.board.setTile(x, y, superTile);
+        updated.push({
+          position: { x, y },
+          color: superTile.color,
+          superType: superTile.superType,
+        });
+      } else {
+        removed = this.boardService.removeGroup(x, y);
+        if (removed.length === 0) return null;
+      }
+    }
 
     const moved = this.boardService.applyGravity();
     const spawned = this.boardService.fill();
 
-    this.score += this.calculateScore(removed.length);
+    this.score += this.calculateScore(scoreBaseSize);
     this.moves--;
 
     this.events.onScoreChanged?.(this.score);
@@ -85,7 +144,7 @@ export class GameService {
 
     this.checkGameState();
 
-    return { removed, moved, spawned };
+    return { removed, moved, spawned, updated };
   }
 
   useRefreshBooster(): boolean {
@@ -96,6 +155,7 @@ export class GameService {
     this.board.init();
 
     this.events.onRefreshBoostersChanged?.(this.refreshBoosters);
+    this.checkGameState();
 
     return true;
   }
@@ -118,7 +178,7 @@ export class GameService {
 
     this.checkGameState();
 
-    return { removed, moved, spawned };
+    return { removed, moved, spawned, updated: [] };
   }
 
   useTeleportBooster(from: Position, to: Position): TeleportResult | null {
@@ -130,6 +190,7 @@ export class GameService {
 
     this.teleportBoosters--;
     this.events.onTeleportBoostersChanged?.(this.teleportBoosters);
+    this.checkGameState();
 
     return { from, to };
   }
@@ -146,6 +207,11 @@ export class GameService {
 
     if (this.moves <= 0) {
       this.setState(GameState.Lost);
+      return;
+    }
+
+    if (!this.boardService.hasAvailableMove() && !this.hasAvailableBoosterMove()) {
+      this.setState(GameState.Lost);
     }
   }
 
@@ -154,5 +220,13 @@ export class GameService {
 
     this.state = state;
     this.events.onStateChanged?.(state);
+  }
+
+  private hasAvailableBoosterMove(): boolean {
+    return (
+      this.refreshBoosters > 0 ||
+      this.bombBoosters > 0 ||
+      this.teleportBoosters > 0
+    );
   }
 }

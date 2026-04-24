@@ -1,9 +1,34 @@
 import { Board } from "../core/Board";
-import { Position, TileMovement, TileSpawn } from "../core/types";
+import { Position, SuperTileType, TileMovement, TileSpawn } from "../core/types";
 import { findGroup } from "../utils/floodFill";
 
 export class BoardService {
   constructor(private board: Board) {}
+
+  hasAvailableMove(): boolean {
+    for (let x = 0; x < this.board.width; x++) {
+      for (let y = 0; y < this.board.height; y++) {
+        const tile = this.board.getTile(x, y);
+        if (!tile) continue;
+
+        if (tile.isSuperTile) {
+          return true;
+        }
+
+        const rightTile = this.board.getTile(x + 1, y);
+        if (rightTile && rightTile.color === tile.color) {
+          return true;
+        }
+
+        const topTile = this.board.getTile(x, y + 1);
+        if (topTile && topTile.color === tile.color) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
 
   removeGroup(x: number, y: number): Position[] {
     const group = findGroup(this.board, x, y);
@@ -55,6 +80,21 @@ export class BoardService {
     return true;
   }
 
+  activateSuperTile(x: number, y: number, superType: SuperTileType, radius: number): Position[] {
+    switch (superType) {
+      case SuperTileType.Row:
+        return this.removeRow(y);
+      case SuperTileType.Column:
+        return this.removeColumn(x);
+      case SuperTileType.Radius:
+        return this.removeTilesInRadius(x, y, radius);
+      case SuperTileType.Board:
+        return this.removeAllTiles();
+      default:
+        return [];
+    }
+  }
+
   applyGravity(): TileMovement[] {
     const moved: TileMovement[] = [];
 
@@ -93,11 +133,62 @@ export class BoardService {
           spawned.push({
             position: { x, y },
             color: tile.color,
+            superType: tile.superType,
           });
         }
       }
     }
 
     return spawned;
+  }
+
+  private removeRow(row: number): Position[] {
+    const removed: Position[] = [];
+
+    for (let x = 0; x < this.board.width; x++) {
+      if (this.board.getTile(x, row)) {
+        removed.push({ x, y: row });
+      }
+    }
+
+    this.clearPositions(removed);
+
+    return removed;
+  }
+
+  private removeColumn(column: number): Position[] {
+    const removed: Position[] = [];
+
+    for (let y = 0; y < this.board.height; y++) {
+      if (this.board.getTile(column, y)) {
+        removed.push({ x: column, y });
+      }
+    }
+
+    this.clearPositions(removed);
+
+    return removed;
+  }
+
+  private removeAllTiles(): Position[] {
+    const removed: Position[] = [];
+
+    for (let x = 0; x < this.board.width; x++) {
+      for (let y = 0; y < this.board.height; y++) {
+        if (this.board.getTile(x, y)) {
+          removed.push({ x, y });
+        }
+      }
+    }
+
+    this.clearPositions(removed);
+
+    return removed;
+  }
+
+  private clearPositions(positions: Position[]) {
+    for (const position of positions) {
+      this.board.setTile(position.x, position.y, null);
+    }
   }
 }

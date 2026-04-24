@@ -1,5 +1,11 @@
 import { Board } from "../core/Board";
-import { Position, TileMovement, TileSpawn } from "../core/types";
+import {
+  Position,
+  SuperTileType,
+  TileMovement,
+  TileSpawn,
+  TileUpdate,
+} from "../core/types";
 import TileView from "./TileView";
 
 const { ccclass, property } = cc._decorator;
@@ -32,6 +38,7 @@ export default class BoardView extends cc.Component {
   private offsetY = 0;
   private boardHeight = 0;
   private selectedTileKey: string | null = null;
+  private animationVersion = 0;
 
   setClickHandler(cb: (x: number, y: number) => void) {
     this.onTileClick = cb;
@@ -39,6 +46,11 @@ export default class BoardView extends cc.Component {
 
   setInteractionLocked(isLocked: boolean) {
     this.isInteractionLocked = isLocked;
+  }
+
+  resetBoard(board: Board) {
+    this.invalidateAnimations();
+    this.render(board);
   }
 
   // =========================
@@ -53,7 +65,13 @@ export default class BoardView extends cc.Component {
         const tile = board.getTile(x, y);
         if (!tile) continue;
 
-        this.spawnTile(x, y, tile.color, this.getTilePosition(x, y));
+        this.spawnTile(
+          x,
+          y,
+          tile.color,
+          tile.superType,
+          this.getTilePosition(x, y)
+        );
       }
     }
   }
@@ -79,6 +97,7 @@ export default class BoardView extends cc.Component {
     x: number,
     y: number,
     type: number,
+    superType: SuperTileType | null,
     pos: cc.Vec3
   ): TileEntry {
     const node = cc.instantiate(this.tilePrefab);
@@ -90,7 +109,7 @@ export default class BoardView extends cc.Component {
     node.setPosition(pos);
 
     const view = node.getComponent(TileView);
-    view.reset(x, y, type);
+    view.reset(x, y, type, superType);
 
     view.setClickHandler((tx, ty) => {
       if (this.isInteractionLocked) return;
@@ -108,6 +127,7 @@ export default class BoardView extends cc.Component {
   // ANIMATION: REMOVE
   // =========================
   animateRemove(cells: Position[], cb?: () => void) {
+    const version = this.animationVersion;
     let remaining = 0;
 
     for (const c of cells) {
@@ -117,6 +137,8 @@ export default class BoardView extends cc.Component {
       remaining++;
 
       tile.view.playRemove(() => {
+        if (version !== this.animationVersion) return;
+
         tile.node.destroy();
         this.tiles.delete(this.getKey(c.x, c.y));
 
@@ -132,6 +154,7 @@ export default class BoardView extends cc.Component {
   // ANIMATION: GRAVITY
   // =========================
   animateGravity(moves: TileMovement[], cb?: () => void) {
+    const version = this.animationVersion;
     // позже сюда добавим move tween по diff
     if (moves.length === 0) {
       cb?.();
@@ -169,6 +192,8 @@ export default class BoardView extends cc.Component {
           { easing: "quadIn" }
         )
         .call(() => {
+          if (version !== this.animationVersion) return;
+
           remaining--;
           if (remaining <= 0) cb?.();
         })
@@ -180,6 +205,7 @@ export default class BoardView extends cc.Component {
   // ANIMATION: FILL
   // =========================
   animateFill(spawns: TileSpawn[], cb?: () => void) {
+    const version = this.animationVersion;
     // позже сюда добавим spawn + drop tween
     if (spawns.length === 0) {
       cb?.();
@@ -198,6 +224,7 @@ export default class BoardView extends cc.Component {
         spawn.position.x,
         spawn.position.y,
         spawn.color,
+        spawn.superType,
         this.getTilePosition(spawn.position.x, startY)
       );
 
@@ -220,6 +247,8 @@ export default class BoardView extends cc.Component {
           { easing: "quadOut" }
         )
         .call(() => {
+          if (version !== this.animationVersion) return;
+
           remaining--;
           if (remaining <= 0) cb?.();
         })
@@ -227,11 +256,23 @@ export default class BoardView extends cc.Component {
     }
   }
 
+  applyTileUpdates(updates: TileUpdate[]) {
+    for (const update of updates) {
+      const entry = this.getTileNode(update.position.x, update.position.y);
+      if (!entry) continue;
+
+      entry.view.setType(update.color, update.superType);
+    }
+  }
+
   animateRefresh(board: Board, cb?: () => void) {
+    const version = this.animationVersion;
     this.setTileSelected(null);
     const currentTiles = Array.from(this.tiles.values());
 
     const renderRefreshedBoard = () => {
+      if (version !== this.animationVersion) return;
+
       this.tiles.clear();
       this.render(board);
 
@@ -250,6 +291,8 @@ export default class BoardView extends cc.Component {
         cc.tween(node)
           .to(0.18, { opacity: 255, scale: 1 }, { easing: "quadOut" })
           .call(() => {
+            if (version !== this.animationVersion) return;
+
             remaining--;
             if (remaining <= 0) cb?.();
           })
@@ -268,6 +311,8 @@ export default class BoardView extends cc.Component {
       cc.tween(node)
         .to(0.12, { opacity: 0, scale: 0.88 }, { easing: "quadIn" })
         .call(() => {
+          if (version !== this.animationVersion) return;
+
           node.destroy();
           remaining--;
           if (remaining <= 0) {
@@ -279,6 +324,7 @@ export default class BoardView extends cc.Component {
   }
 
   animateSwap(from: Position, to: Position, cb?: () => void) {
+    const version = this.animationVersion;
     this.setTileSelected(null);
 
     const fromKey = this.getKey(from.x, from.y);
@@ -298,6 +344,8 @@ export default class BoardView extends cc.Component {
 
     let remaining = 2;
     const onDone = () => {
+      if (version !== this.animationVersion) return;
+
       remaining--;
       if (remaining <= 0) cb?.();
     };
@@ -322,11 +370,17 @@ export default class BoardView extends cc.Component {
 
   private clear() {
     this.selectedTileKey = null;
-    for (const { node } of this.tiles.values()) {
-      node.destroy();
+    const children = [...this.node.children];
+    for (const child of children) {
+      cc.Tween.stopAllByTarget(child);
     }
-
+    this.node.removeAllChildren();
     this.tiles.clear();
+  }
+
+  private invalidateAnimations() {
+    this.animationVersion++;
+    this.clear();
   }
 
   private updateLayout(board: Board) {

@@ -173,7 +173,7 @@ export default class GameController extends cc.Component {
       }
     });
 
-    this.boardView.render(this.game.board);
+    this.boardView.resetBoard(this.game.board);
   }
 
   onTileClick(x: number, y: number) {
@@ -206,11 +206,18 @@ export default class GameController extends cc.Component {
   onResize() {
     if (!this.game) return;
 
+    if (this.isMoveInProgress) {
+      this.boardView.resetBoard(this.game.board);
+      this.finishMoveSequence();
+      return;
+    }
+
     this.boardView.onResize(this.game.board);
   }
 
   private runMoveSequence(result: MoveResult) {
     this.boardView.animateRemove(result.removed, () => {
+      this.boardView.applyTileUpdates(result.updated);
       this.boardView.animateGravity(result.moved, () => {
         this.boardView.animateFill(result.spawned, () => {
           this.finishMoveSequence();
@@ -280,9 +287,6 @@ export default class GameController extends cc.Component {
   private onRefreshClick() {
     if (!this.canUseRefreshBooster()) return;
 
-    const didUseBooster = this.game.useRefreshBooster();
-    if (!didUseBooster) return;
-
     this.isMoveInProgress = true;
     this.isBombArmed = false;
     this.isTeleportArmed = false;
@@ -291,6 +295,14 @@ export default class GameController extends cc.Component {
     this.updateTeleportArmState();
     this.boardView.setInteractionLocked(true);
     this.updateBoosterButtonsState();
+
+    const didUseBooster = this.game.useRefreshBooster();
+    if (!didUseBooster) {
+      this.isMoveInProgress = false;
+      this.boardView.setInteractionLocked(this.game.state !== GameState.Playing);
+      this.updateBoosterButtonsState();
+      return;
+    }
 
     this.runRefreshSequence();
   }
