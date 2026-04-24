@@ -1,5 +1,5 @@
 import { Tile } from "./Tile";
-import { TileColor } from "./types";
+import { getTileColorCount, TileColor } from "./types";
 
 export class Board {
   grid: (Tile | null)[][] = [];
@@ -30,7 +30,7 @@ export class Board {
   }
 
   createRandomTile(x: number, y: number): Tile {
-    const color = Math.floor(Math.random() * 5);
+    const color = Math.floor(Math.random() * getTileColorCount()) as TileColor;
     return new Tile(x, y, color);
   }
 }

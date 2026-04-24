@@ -2,5 +2,6 @@
   "migrate-history": [
     "cloud-function"
   ],
-  "start-scene": "abb323c5-ffd1-4ec7-9c45-247d07cd2bf9"
+  "start-scene": "abb323c5-ffd1-4ec7-9c45-247d07cd2bf9",
+  "last-module-event-record-time": 1776984645439
 }

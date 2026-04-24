@@ -327,6 +327,24 @@
     "playAgainButton": {
       "__id__": 70
     },
+    "refreshButtonNode": {
+      "__id__": 28
+    },
+    "refreshCountLabel": {
+      "__id__": 33
+    },
+    "bombButtonNode": {
+      "__id__": 37
+    },
+    "bombCountLabel": {
+      "__id__": 42
+    },
+    "teleportButtonNode": {
+      "__id__": 46
+    },
+    "teleportCountLabel": {
+      "__id__": 51
+    },
     "_id": "03fUdPu5tIfJUHQn6nNOq1"
   },
   {

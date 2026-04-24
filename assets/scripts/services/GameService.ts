@@ -1,5 +1,13 @@
 import { Board } from "../core/Board";
-import { INITIAL_MOVES, TARGET_SCORE } from "../core/config";
+import {
+  BOMB_RADIUS,
+  INITIAL_BOMB_BOOSTERS,
+  INITIAL_MOVES,
+  INITIAL_REFRESH_BOOSTERS,
+  INITIAL_TELEPORT_BOOSTERS,
+  TARGET_SCORE,
+} from "../core/config";
+import { Position, TileMovement, TileSpawn } from "../core/types";
 import { BoardService } from "./BoardService";
 
 export enum GameState {
@@ -11,11 +19,21 @@ export enum GameState {
 type GameEvents = {
   onScoreChanged?: (score: number) => void;
   onMovesChanged?: (moves: number) => void;
+  onRefreshBoostersChanged?: (count: number) => void;
+  onBombBoostersChanged?: (count: number) => void;
+  onTeleportBoostersChanged?: (count: number) => void;
   onStateChanged?: (state: GameState) => void;
 };
 
 export type MoveResult = {
-  removed: { x: number; y: number }[];
+  removed: Position[];
+  moved: TileMovement[];
+  spawned: TileSpawn[];
+};
+
+export type TeleportResult = {
+  from: Position;
+  to: Position;
 };
 
 export class GameService {
@@ -25,6 +43,9 @@ export class GameService {
   score = 0;
   targetScore = TARGET_SCORE;
   moves = INITIAL_MOVES;
+  refreshBoosters = INITIAL_REFRESH_BOOSTERS;
+  bombBoosters = INITIAL_BOMB_BOOSTERS;
+  teleportBoosters = INITIAL_TELEPORT_BOOSTERS;
 
   state: GameState = GameState.Playing;
 
@@ -39,6 +60,9 @@ export class GameService {
     this.events = events;
     this.events.onScoreChanged?.(this.score);
     this.events.onMovesChanged?.(this.moves);
+    this.events.onRefreshBoostersChanged?.(this.refreshBoosters);
+    this.events.onBombBoostersChanged?.(this.bombBoosters);
+    this.events.onTeleportBoostersChanged?.(this.teleportBoosters);
     this.events.onStateChanged?.(this.state);
   }
 
@@ -50,6 +74,9 @@ export class GameService {
 
     if (removed.length === 0) return null;
 
+    const moved = this.boardService.applyGravity();
+    const spawned = this.boardService.fill();
+
     this.score += this.calculateScore(removed.length);
     this.moves--;
 
@@ -58,15 +85,53 @@ export class GameService {
 
     this.checkGameState();
 
-    return { removed };
+    return { removed, moved, spawned };
   }
 
-  stepGravity(): boolean {
-    return this.boardService.applyGravity();
+  useRefreshBooster(): boolean {
+    if (this.state !== GameState.Playing) return false;
+    if (this.refreshBoosters <= 0) return false;
+
+    this.refreshBoosters--;
+    this.board.init();
+
+    this.events.onRefreshBoostersChanged?.(this.refreshBoosters);
+
+    return true;
   }
 
-  stepFill(): boolean {
-    return this.boardService.fill();
+  useBombBooster(x: number, y: number): MoveResult | null {
+    if (this.state !== GameState.Playing) return null;
+    if (this.bombBoosters <= 0) return null;
+
+    const removed = this.boardService.removeTilesInRadius(x, y, BOMB_RADIUS);
+    if (removed.length === 0) return null;
+
+    const moved = this.boardService.applyGravity();
+    const spawned = this.boardService.fill();
+
+    this.bombBoosters--;
+    this.score += this.calculateScore(removed.length);
+
+    this.events.onBombBoostersChanged?.(this.bombBoosters);
+    this.events.onScoreChanged?.(this.score);
+
+    this.checkGameState();
+
+    return { removed, moved, spawned };
+  }
+
+  useTeleportBooster(from: Position, to: Position): TeleportResult | null {
+    if (this.state !== GameState.Playing) return null;
+    if (this.teleportBoosters <= 0) return null;
+
+    const didSwap = this.boardService.swapTiles(from, to);
+    if (!didSwap) return null;
+
+    this.teleportBoosters--;
+    this.events.onTeleportBoostersChanged?.(this.teleportBoosters);
+
+    return { from, to };
   }
 
   private calculateScore(size: number) {

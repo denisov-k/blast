@@ -9,11 +9,16 @@ export default class TileView extends cc.Component {
   y: number = 0;
 
   private isLocked: boolean = false;
+  private isSelected: boolean = false;
 
   private onClickHandler: ((x: number, y: number) => void) | null = null;
 
   onLoad() {
     this.node.on(cc.Node.EventType.TOUCH_END, this.onClick, this);
+  }
+
+  onDestroy() {
+    this.node.off(cc.Node.EventType.TOUCH_END, this.onClick, this);
   }
 
   setClickHandler(cb: (x: number, y: number) => void) {
@@ -40,9 +45,9 @@ export default class TileView extends cc.Component {
   }
 
   reset(x: number, y: number, type: number) {
-    this.x = x;
-    this.y = y;
+    this.setCoords(x, y);
 
+    this.isSelected = false;
     this.node.scale = 1;
     this.node.opacity = 255;
     this.isLocked = false;
@@ -57,8 +62,13 @@ export default class TileView extends cc.Component {
     sprite.sizeMode = cc.Sprite.SizeMode.CUSTOM;
   }
 
-  setStartCoords(x: number, y: number) {
+  setCoords(x: number, y: number) {
     this.x = x;
     this.y = y;
+  }
+
+  setSelected(isSelected: boolean) {
+    this.isSelected = isSelected;
+    this.node.scale = isSelected ? 1.08 : 1;
   }
 }
